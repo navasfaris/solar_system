@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handwriter – text, PDF and pen to handwriting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Homemade+Apple&family=Reenie+Beanie&family=Nanum+Pen+Script&family=Shadows+Into+Light&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>window.MathJax={startup:{typeset:false},svg:{fontCache:'none'}};</script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
+<style>
+input[type=password],input[type=text]{width:100%;background:#17212c;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
+:root{--bg:#1c2733;--panel:#243242;--line:#3a4b5f;--text:#e8eef5;--mute:#9db0c4;--accent:#5fb3ff;--ink:#1a3d9c}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{margin:0;font:600 30px "Caveat",cursive;letter-spacing:.5px}
+header span{color:var(--mute)}
+main{display:grid;grid-template-columns:minmax(320px,430px) 1fr;gap:20px;padding:20px;align-items:start}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1}
+button,select,input[type=file]::file-selector-button{font:inherit;background:#2d4157;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{background:#38526e}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.on{background:var(--accent);color:#07233d;border-color:var(--accent);font-weight:600}
+button.go{background:var(--accent);color:#07233d;border-color:var(--accent);font-weight:600}
+textarea{width:100%;min-height:200px;resize:vertical;background:#17212c;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:15px/1.5 Inter,sans-serif}
+label{display:block;margin:10px 0 2px;color:var(--mute);font-size:13px}
+input[type=range]{width:100%}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.hide{display:none}
+#pad{width:100%;height:220px;background:#fdfdf8;border-radius:6px;touch-action:none;cursor:crosshair;display:block}
+.btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+#status{margin-top:8px;color:var(--mute);font-size:13px;min-height:20px}
+#pages{display:flex;flex-direction:column;gap:20px;align-items:center}
+#pages canvas{max-width:100%;height:auto;box-shadow:0 6px 24px rgba(0,0,0,.45);background:#fff}
+.top{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+@media print{body{background:#fff}header,.panel,.top{display:none!important}main{display:block;padding:0}#pages{gap:0}#pages canvas{box-shadow:none;width:100%!important;height:auto!important;page-break-after:always}}
+</style>
+</head>
+<body>
+<header><h1>Handwriter</h1><span>Type, upload a PDF or write with a pen. Words become handwriting, equations become typeset LaTeX.</span></header>
+<main>
+<section class="panel">
+  <div class="tabs">
+    <button id="tText" class="on">Type / PDF</button>
+    <button id="tPen">Write with pen</button>
+  </div>
+
+  <div id="vText">
+    <input type="file" id="pdf" accept="application/pdf">
+    <div id="status"></div>
+    <label for="txt">Text</label>
+    <textarea id="txt" placeholder="Type or paste here, or upload a PDF above.">Dear friend,
+
+I hope this note finds you well. This page was typed on a keyboard, but it looks like it was written by hand with a real pen.
+
+Here is an equation I like:
+
+$$\int_{-\infty}^{\infty} e^{-x^2}\,dx=\sqrt{\pi}$$
+
+Warm regards,
+Me</textarea>
+  </div>
+
+  <div id="vPen" class="hide">
+    <canvas id="pad"></canvas>
+    <div class="row" style="margin-top:8px">
+      <div><label for="penW">Pen thickness</label><input id="penW" type="range" min="1" max="8" value="3" step=".5"></div>
+      <div><label for="lang">Language</label>
+        <select id="lang"><option value="en">English</option><option value="hi">Hindi</option><option value="ml">Malayalam</option><option value="ta">Tamil</option><option value="ar">Arabic</option><option value="fr">French</option><option value="es">Spanish</option><option value="de">German</option></select></div>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;margin:8px 0 0"><input type="checkbox" id="bxOn" checked> Put results in a box</label>
+    <div class="btns">
+      <button id="conv" class="go">Convert words to handwriting</button>
+      <button id="eqb" class="go">Convert equation to LaTeX</button>
+      <button id="undo">Undo stroke</button>
+      <button id="clr">Clear</button>
+    </div>
+    <div id="status2" style="margin-top:8px;color:var(--mute);font-size:13px"></div>
+    <div style="margin-top:8px;color:var(--mute);font-size:13px">Words are recognised and rewritten in your handwriting style. Equations are read, corrected to proper maths and physics notation, written as LaTeX and typeset on the page.</div>
+    <label for="akey">Anthropic API key (used only to read handwritten equations)</label>
+    <input type="password" id="akey" autocomplete="off" placeholder="sk-ant-…">
+    <label style="display:flex;gap:6px;align-items:center;margin:4px 0 0"><input type="checkbox" id="rem"> Remember on this device</label>
+    <label for="tex">LaTeX code</label>
+    <textarea id="tex" style="min-height:70px;font-family:ui-monospace,Menlo,monospace;font-size:13px" placeholder="Result appears here. You can also type LaTeX yourself, e.g. \frac{-b\pm\sqrt{b^2-4ac}}{2a}"></textarea>
+    <div id="prev" style="background:#fff;color:#111;border-radius:6px;padding:8px;margin-top:6px;overflow-x:auto;min-height:44px"></div>
+    <div class="btns"><button id="addTex">Add this LaTeX to page</button><button id="cpTex">Copy LaTeX</button></div>
+    <label for="rec">Recognised text (edit if needed)</label>
+    <textarea id="rec" style="min-height:90px"></textarea>
+    <div class="btns"><button id="addRec">Add to page</button></div>
+  </div>
+
+  <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+  <label for="font">Handwriting style</label>
+  <select id="font" style="width:100%">
+    <option value="Caveat">Caveat – quick and neat</option>
+    <option value="Reenie Beanie">Reenie Beanie – messy</option>
+    <option value="Homemade Apple">Homemade Apple – cursive</option>
+    <option value="Nanum Pen Script">Nanum Pen – pen script</option>
+    <option value="Shadows Into Light">Shadows Into Light – marker</option>
+  </select>
+  <div class="row">
+    <div><label for="size">Size</label><input id="size" type="range" min="18" max="48" value="30"></div>
+    <div><label for="lh">Line gap</label><input id="lh" type="range" min="28" max="70" value="40"></div>
+  </div>
+  <div class="row">
+    <div><label for="jit">Natural wobble</label><input id="jit" type="range" min="0" max="10" value="4"></div>
+    <div><label for="slant">Slant</label><input id="slant" type="range" min="-10" max="25" value="6"></div>
+  </div>
+  <label for="eqs">Equation size</label><input id="eqs" type="range" min="25" max="120" value="55">
+  <div class="row">
+    <div><label for="ink">Ink</label>
+      <select id="ink"><option value="#1a3d9c">Blue</option><option value="#16181d">Black</option><option value="#8a1c1c">Red</option><option value="#1c5e3a">Green</option></select></div>
+    <div><label for="paper">Paper</label>
+      <select id="paper"><option value="lined">Lined</option><option value="grid">Grid</option><option value="plain">Plain</option></select></div>
+  </div>
+</section>
+
+<section>
+  <div class="top">
+    <button id="dl" class="go">Download PNG</button>
+    <button id="pr">Print / save as PDF</button>
+  </div>
+  <div id="pages"></div>
+</section>
+</main>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const W=794,H=1123,SC=2,MX=96,MY=104;
+
+/* ---------- tabs ---------- */
+function tab(pen){$('vText').classList.toggle('hide',pen);$('vPen').classList.toggle('hide',!pen);
+  $('tText').classList.toggle('on',!pen);$('tPen').classList.toggle('on',pen);if(pen)sizePad();}
+$('tText').onclick=()=>tab(false);$('tPen').onclick=()=>tab(true);
+
+/* ---------- handwriting renderer ---------- */
+function rng(seed){return()=>{seed=(seed*16807)%2147483647;return(seed-1)/2147483646;};}
+function drawPaper(c,type,lh){
+  c.fillStyle='#fffefb';c.fillRect(0,0,W,H);
+  if(type==='lined'){
+    c.strokeStyle='#b8cde6';c.lineWidth=1;
+    for(let y=MY;y<H-50;y+=lh){c.beginPath();c.moveTo(0,y+6);c.lineTo(W,y+6);c.stroke();}
+    c.strokeStyle='#e8a0a0';c.beginPath();c.moveTo(MX-18,0);c.lineTo(MX-18,H);c.stroke();
+  }else if(type==='grid'){
+    c.strokeStyle='#d5e0ee';c.lineWidth=1;
+    for(let y=0;y<H;y+=24){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
+    for(let x=0;x<W;x+=24){c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke();}
+  }
+}
+function wrap(c,text,maxW){
+  const out=[];
+  text.replace(/\r/g,'').split('\n').forEach(p=>{
+    if(!p.trim()){out.push('');return;}
+    let line='';
+    p.split(/\s+/).forEach(w=>{
+      const t=line?line+' '+w:w;
+      if(c.measureText(t).width>maxW&&line){out.push(line);line=w;}else line=t;
+    });
+    out.push(line);
+  });
+  return out;
+}
+const bxs=[],PAD=14;
+function drawBox(c,x,y,w,h,ink,rand,jit){
+  const j=()=>(rand()-.5)*(1.2+2*jit);
+  c.save();c.strokeStyle=ink;c.lineWidth=1.8;c.lineCap='round';c.lineJoin='round';
+  const side=(x0,y0,x1,y1)=>{
+    const dx=x1-x0,dy=y1-y0,l=Math.hypot(dx,dy)||1,ox=dx/l*3,oy=dy/l*3;
+    c.beginPath();c.moveTo(x0-ox+j(),y0-oy+j());
+    c.quadraticCurveTo((x0+x1)/2+j()*1.5,(y0+y1)/2+j()*1.5,x1+ox+j(),y1+oy+j());c.stroke();
+  };
+  side(x,y,x+w,y);side(x+w,y,x+w,y+h);side(x+w,y+h,x,y+h);side(x,y+h,x,y);
+  c.restore();
+}
+const mcache=new Map();
+function mjReady(){return new Promise(ok=>{let n=0;const t=()=>{
+  if(window.MathJax&&MathJax.startup&&MathJax.startup.promise)MathJax.startup.promise.then(()=>ok(true));
+  else if(++n>80)ok(false);else setTimeout(t,100);};t();});}
+async function mathImg(tex,ink,px){
+  const key=tex+'|'+ink+'|'+px;if(mcache.has(key))return mcache.get(key);
+  let r=null;
+  try{
+    if(await mjReady()){
+      const svg=MathJax.tex2svg(tex,{display:true}).querySelector('svg');
+      const ex=px*.431,w=parseFloat(svg.getAttribute('width'))*ex,h=parseFloat(svg.getAttribute('height'))*ex;
+      svg.setAttribute('width',w+'px');svg.setAttribute('height',h+'px');svg.removeAttribute('style');
+      svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+      const str=new XMLSerializer().serializeToString(svg).replace(/currentColor/g,ink);
+      const img=new Image();
+      await new Promise((ok,no)=>{img.onload=ok;img.onerror=no;img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(str);});
+      r={img,w,h};
+    }
+  }catch(e){r=null;}
+  mcache.set(key,r);return r;
+}
+async function render(){
+  const fam=$('font').value,size=+$('size').value,lh=+$('lh').value,jit=+$('jit').value/10,
+        slant=+$('slant').value*Math.PI/180/10*4,ink=$('ink').value,paper=$('paper').value,eqScale=+$('eqs').value/100;
+  try{await document.fonts.load(`${size}px "${fam}"`);}catch(e){}
+  const m=document.createElement('canvas').getContext('2d');
+  m.font=`${size}px "${fam}",cursive`;
+  const perPage=Math.max(1,Math.floor((H-MY-60)/lh)+1);
+  const textW=W-MX-60,fontPx=size*eqScale*1.8,items=[];
+  for(const raw of $('txt').value.replace(/\r/g,'').split('\n')){
+    const t=raw.trim();
+    const mb=/^\[\[\s*\$\$(.+)\$\$\s*\]\]$/.exec(t),mp=/^\$\$(.+)\$\$$/.exec(t),tex=(mb||mp||[])[1];
+    if(tex){
+      const r=await mathImg(tex.trim(),ink,fontPx);
+      if(r&&r.img){
+        const box=!!mb,pw=textW-(box?2*PAD:0),s2=Math.min(1,pw/r.w),w=r.w*s2,h=r.h*s2,bh=h+(box?2*PAD:0);
+        items.push({math:r,w,h,box,bh,span:Math.max(1,Math.ceil((bh+lh*.5)/lh))});
+      }else items.push({ln:tex,span:1});
+      continue;
+    }
+    const k=/^\[\[bx(\d+)\]\]$/.exec(t);
+    if(k&&bxs[k[1]-1]!==undefined){
+      const bl=wrap(m,bxs[k[1]-1],textW-2*PAD-10),cap=Math.max(1,perPage-1);
+      for(let i=0;i<bl.length;i+=cap){const ch=bl.slice(i,i+cap);items.push({box:ch,span:ch.length+1});}
+    }else wrap(m,raw,textW).forEach(ln=>items.push({ln,span:1}));
+  }
+  const pgs=[[]];let row=0;
+  items.forEach(it=>{
+    if(row+it.span>perPage&&row>0){pgs.push([]);row=0;}
+    pgs[pgs.length-1].push({it,row});row+=it.span;
+  });
+  const host=$('pages');host.innerHTML='';
+  const rand=rng(7);
+  pgs.forEach(pg=>{
+    const cv=document.createElement('canvas');cv.width=W*SC;cv.height=H*SC;
+    cv.style.width=W+'px';
+    const c=cv.getContext('2d');c.scale(SC,SC);
+    drawPaper(c,paper,lh);
+    c.font=`${size}px "${fam}",cursive`;c.fillStyle=ink;c.textBaseline='alphabetic';
+    const drawLine=(ln,x,y)=>{
+      const drift=(rand()-.5)*0.004*jit;
+      for(let k=0;k<ln.length;k++){
+        const ch=ln[k],w=c.measureText(ch).width;
+        c.save();
+        c.translate(x+w/2,y+(rand()-.5)*3*jit+k*drift*10);
+        c.rotate((rand()-.5)*0.12*jit);
+        c.transform(1,0,-Math.tan(slant),1,0,0);
+        c.globalAlpha=.88+rand()*.12;
+        const sz=1+(rand()-.5)*.08*jit;c.scale(sz,sz);
+        c.fillText(ch,-w/2,0);
+        c.restore();
+        x+=w+(rand()-.5)*1.2*jit;
+      }
+    };
+    pg.forEach(({it,row:i})=>{
+      if(it.math){
+        const top=MY+i*lh-lh*.75;
+        if(it.box){
+          const bw=it.w+2*PAD,x0=MX+(textW-bw)/2;
+          drawBox(c,x0,top,bw,it.bh,ink,rand,jit);c.drawImage(it.math.img,x0+PAD,top+PAD,it.w,it.h);
+        }else c.drawImage(it.math.img,MX+(textW-it.w)/2,top+lh*.15,it.w,it.h);
+        return;
+      }
+      if(it.box){
+        const n=it.box.length,top=MY+i*lh-lh*.8,h=(n-1)*lh+lh*1.25;
+        const tw=Math.max(...it.box.map(l=>c.measureText(l).width));
+        drawBox(c,MX-8,top,Math.min(tw+2*PAD+10,W-MX-60),h,ink,rand,jit);
+        it.box.forEach((l,j)=>drawLine(l,MX+PAD-8,MY+(i+j)*lh+(rand()-.5)*2*jit));
+        return;
+      }
+      drawLine(it.ln,MX+(rand()-.5)*6*jit,MY+i*lh+(rand()-.5)*3*jit);
+    });
+    host.appendChild(cv);
+  });
+}
+let t;const queue=()=>{clearTimeout(t);t=setTimeout(render,150);};
+['txt','font','size','lh','jit','slant','ink','paper','eqs'].forEach(id=>$(id).addEventListener('input',queue));
+document.fonts.ready.then(render);
+
+/* ---------- PDF upload ---------- */
+$('pdf').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const st=$('status');
+  if(!window.pdfjsLib){st.textContent='PDF reader did not load. Check your internet connection.';return;}
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  try{
+    st.textContent='Reading PDF…';
+    const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+    let all='';
+    for(let i=1;i<=pdf.numPages;i++){
+      st.textContent=`Reading page ${i} of ${pdf.numPages}…`;
+      const tc=await (await pdf.getPage(i)).getTextContent();
+      let lastY=null,line='';
+      tc.items.forEach(it=>{
+        const y=it.transform[5];
+        if(lastY!==null&&Math.abs(y-lastY)>3){all+=line.trim()+'\n';line='';}
+        line+=it.str+(it.hasEOL?' ':'');lastY=y;
+      });
+      all+=line.trim()+'\n\n';
+    }
+    if(!all.trim()){st.textContent='No selectable text found. This PDF may be a scan.';return;}
+    $('txt').value=all.trim();
+    st.textContent=`Loaded ${pdf.numPages} page(s). You can edit the text below.`;
+    render();
+  }catch(err){st.textContent='Could not read that PDF: '+err.message;}
+};
+
+/* ---------- pen pad ---------- */
+const pad=$('pad'),pc=pad.getContext('2d');
+let strokes=[],cur=null,t0=0;
+function sizePad(){
+  const r=pad.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  if(!r.width)return;
+  pad.width=r.width*d;pad.height=r.height*d;pc.setTransform(d,0,0,d,0,0);redraw();
+}
+function redraw(){
+  const r=pad.getBoundingClientRect();
+  pc.clearRect(0,0,r.width,r.height);
+  pc.strokeStyle='#e3e3d8';pc.lineWidth=1;pc.beginPath();pc.moveTo(0,r.height*.68);pc.lineTo(r.width,r.height*.68);pc.stroke();
+  pc.strokeStyle='#14306f';pc.lineCap='round';pc.lineJoin='round';
+  strokes.forEach(s=>{
+    pc.lineWidth=s.w;pc.beginPath();
+    s.p.forEach((q,i)=>i?pc.lineTo(q.x,q.y):pc.moveTo(q.x,q.y));
+    if(s.p.length===1)pc.lineTo(s.p[0].x+.1,s.p[0].y);
+    pc.stroke();
+  });
+}
+function pt(e){const r=pad.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top,t:Math.round(performance.now()-t0)};}
+pad.addEventListener('pointerdown',e=>{
+  pad.setPointerCapture(e.pointerId);
+  if(!strokes.length)t0=performance.now();
+  cur={w:+$('penW').value,p:[pt(e)]};strokes.push(cur);redraw();
+});
+pad.addEventListener('pointermove',e=>{if(cur){cur.p.push(pt(e));redraw();}});
+['pointerup','pointercancel'].forEach(n=>pad.addEventListener(n,()=>{cur=null;}));
+$('undo').onclick=()=>{strokes.pop();redraw();};
+$('clr').onclick=()=>{strokes=[];redraw();$('status2').textContent='';};
+window.addEventListener('resize',sizePad);
+
+async function recogniseGoogle(){
+  const r=pad.getBoundingClientRect();
+  const ink=strokes.map(s=>[s.p.map(q=>Math.round(q.x)),s.p.map(q=>Math.round(q.y)),s.p.map(q=>q.t)]);
+  const res=await fetch('https://inputtools.google.com/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({options:'enable_pre_space',requests:[{writing_guide:{writing_area_width:Math.round(r.width),writing_area_height:Math.round(r.height)},ink,language:$('lang').value}]})
+  });
+  const d=await res.json();
+  if(d[0]!=='SUCCESS')throw new Error('Recognition failed');
+  return d[1][0][1][0];
+}
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});}
+async function recogniseOCR(){
+  if(!window.Tesseract)await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+  const tmp=document.createElement('canvas');tmp.width=pad.width;tmp.height=pad.height;
+  const x=tmp.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,tmp.width,tmp.height);x.drawImage(pad,0,0);
+  const out=await Tesseract.recognize(tmp,'eng');
+  return out.data.text.trim();
+}
+$('conv').onclick=async()=>{
+  const st=$('status2');
+  if(!strokes.length){st.textContent='Write something on the pad first.';return;}
+  st.textContent='Recognising your writing…';
+  let text='';
+  try{text=await recogniseGoogle();}
+  catch(e){
+    try{st.textContent='Switching to backup text reader…';text=await recogniseOCR();}
+    catch(e2){st.textContent='Could not recognise the writing. Check your internet connection.';return;}
+  }
+  $('rec').value=text;
+  st.textContent=text?'Done. Edit the text if needed, then add it to the page.':'Nothing recognised. Try writing larger and clearer.';
+  if(text){addWords(text);}
+};
+function padPNG(){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  strokes.forEach(s=>s.p.forEach(q=>{x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);}));
+  const m=24,w=x1-x0+2*m,h=y1-y0+2*m,k=Math.min(2,1000/Math.max(w,h));
+  const cv=document.createElement('canvas');cv.width=Math.ceil(w*k);cv.height=Math.ceil(h*k);
+  const c=cv.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,cv.width,cv.height);
+  c.strokeStyle='#000';c.lineCap='round';c.lineJoin='round';c.lineWidth=Math.max(2,3*k);
+  strokes.forEach(s=>{c.beginPath();s.p.forEach((q,i)=>{const X=(q.x-x0+m)*k,Y=(q.y-y0+m)*k;i?c.lineTo(X,Y):c.moveTo(X,Y);});
+    if(s.p.length===1)c.lineTo((s.p[0].x-x0+m)*k+.1,(s.p[0].y-y0+m)*k);c.stroke();});
+  return cv.toDataURL('image/png').split(',')[1];
+}
+function addEquation(tex){
+  tex=tex.replace(/\s*\n\s*/g,' ').trim();if(!tex)return;
+  addText($('bxOn').checked?'[[ $$'+tex+'$$ ]]':'$$'+tex+'$$');
+}
+async function showPrev(){
+  const tex=$('tex').value.trim(),p=$('prev');
+  if(!tex){p.textContent='';return;}
+  if(!(await mjReady())){p.textContent='Preview needs an internet connection.';return;}
+  p.replaceChildren(MathJax.tex2svg(tex,{display:false}));
+}
+$('tex').addEventListener('input',()=>{clearTimeout(window._pt);window._pt=setTimeout(showPrev,250);});
+$('addTex').onclick=()=>{addEquation($('tex').value);$('status2').textContent='Equation added to the page.';};
+$('cpTex').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($('tex').value);$('status2').textContent='LaTeX copied.';};
+try{const k=localStorage.getItem('hw_key');if(k){$('akey').value=k;$('rem').checked=true;}}catch(e){}
+$('eqb').onclick=async()=>{
+  const st=$('status2');
+  if(!strokes.length){st.textContent='Write an equation on the pad first.';return;}
+  const key=$('akey').value.trim();
+  if(!key){st.textContent='Paste your Anthropic API key below to read handwritten equations, or type the LaTeX yourself.';$('akey').focus();return;}
+  try{if($('rem').checked)localStorage.setItem('hw_key',key);else localStorage.removeItem('hw_key');}catch(e){}
+  st.textContent='Reading your equation…';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-5-5',max_tokens:1000,messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:'image/png',data:padPNG()}},
+        {type:'text',text:'This is a handwritten mathematics or physics expression. Transcribe it into correct, standard LaTeX. Fix sloppy notation: proper fractions (\\frac), exponents, subscripts, Greek letters, vectors (\\vec), \\partial, \\nabla, \\hbar, upright d in differentials, \\mathrm for units and function names, \\cdot or \\times where intended. Do not solve or simplify it. If it has several lines, use \\begin{aligned} ... \\end{aligned} with \\\\ between lines. Reply with ONLY the LaTeX: no $ signs, no code fences, no explanation.'}]}]})});
+    const d=await res.json();
+    if(!res.ok)throw new Error((d.error&&d.error.message)||('HTTP '+res.status));
+    let tex=d.content.map(x=>x.text||'').join('').trim()
+      .replace(/^```(?:latex|tex)?\s*/i,'').replace(/\s*```$/,'').replace(/^\$\$|\$\$$/g,'').replace(/^\\\[|\\\]$/g,'').trim();
+    $('tex').value=tex;showPrev();addEquation(tex);
+    strokes=[];redraw();
+    st.textContent='Converted to LaTeX and added to the page. To change it, edit the line in the text box.';
+  }catch(err){st.textContent='Could not read the equation: '+err.message;}
+};
+function addWords(t){if($('bxOn').checked){bxs.push(t);addText('[['+'bx'+bxs.length+']]');}else addText(t);}
+function addText(s){
+  const ta=$('txt');ta.value=(ta.value.trim()?ta.value.replace(/\s+$/,'')+'\n':'')+s;render();
+}
+$('addRec').onclick=()=>{const v=$('rec').value.trim();if(v){addWords(v);$('status2').textContent='Added to the page.';}};
+
+/* ---------- output ---------- */
+$('dl').onclick=()=>{
+  [...$('pages').children].forEach((cv,i)=>setTimeout(()=>{
+    const a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download=`handwriting-page-${i+1}.png`;a.click();
+  },i*300));
+};
+$('pr').onclick=()=>window.print();
+})();
+</script>
+</body>
+</html>
